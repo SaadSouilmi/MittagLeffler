@@ -178,6 +178,10 @@ uv run docs/figures.py "$ML_RESULTS/measurements.txt" \
 
 The script pins its Python dependencies, checks the sample and repetition counts, writes the reference comparisons and summary to the selected data directory, and creates the four README figures. The evaluator itself requires no Python dependencies.
 
+## License
+
+Licensed under the [MIT License](LICENSE). You may use, copy, modify, and redistribute this code, including in commercial and closed-source projects, provided you retain the copyright and license notice. Provided without warranty.
+
 ## References
 
 1. **J. A. C. Weideman and L. N. Trefethen (2007).** *Parabolic and Hyperbolic Contours for Computing the Bromwich Integral.* Mathematics of Computation **76**(259), 1341–1356. [DOI](https://doi.org/10.1090/S0025-5718-07-01945-X), [author-hosted paper](https://people.maths.ox.ac.uk/trefethen/publication/PDF/2007_121.pdf). Analysis of the contour family underlying this method.
