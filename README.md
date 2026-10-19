@@ -8,14 +8,13 @@ $$
 
 designed for evaluating many arguments with the same real parameters $\alpha,\beta$. The usual one-parameter function is $E_\alpha(-X)=E_{\alpha,1}(-X)$.
 
-The implementation precomputes a fixed parabolic-contour quadrature. Each subsequent general evaluation uses **31 real rational terms**, with no complex arithmetic, transcendental functions, or heap allocation. The benchmark below measures approximately **26 million evaluations per second** on one Xeon Gold 6134 hardware thread, excluding setup.
+The implementation precomputes a fixed parabolic-contour quadrature using real arithmetic. Each subsequent general evaluation uses **31 real rational terms**, with no complex arithmetic, transcendental functions, or heap allocation. The benchmark below measures approximately **33 to 34 million evaluations per second** on one Xeon Gold 6134 hardware thread, excluding setup.
 
 ## Usage and scope
 
 **Pass the nonnegative magnitude `X`.** `MLQuadEval(2.0, &Q)` approximates $E_{\alpha,\beta}(-2)$.
 
 ```cpp
-#include <complex.h>
 #include <stdio.h>
 #include "src/mittag_leffler.h"
 #include "src/mittag_leffler.cpp"
@@ -31,7 +30,7 @@ int main()
 
 This is not a standalone library. The code is meant to be copied or ported into your own project, adapting the types, naming conventions, and build setup to your codebase. Initialize once for each parameter pair and reuse `Q`; evaluation only reads the initialized coefficients.
 
-The intended general regime is $0<\alpha<1$ with positive real $\beta$. The numerical checks below cover $\alpha\in\{0.55,0.75,0.95\}$ and $\beta\in\{\alpha,1,\alpha+1\}$, plus selected special cases. `MLQuadInit` does not validate the parameter domain, and these checks do not establish accuracy for every possible parameter pair.
+The intended general regime is $0<\alpha<1$ with positive real $\beta$. The figures below cover $\alpha\in\{0.55,0.75,0.95\}$ and $\beta\in\{\alpha,1,\alpha+1\}$, plus selected special cases. An expanded numerical sweep also checks values near $\alpha=0$ and $\alpha=1$. `MLQuadInit` does not validate the parameter domain, and these checks do not establish accuracy for every possible parameter pair.
 
 | Input or parameter case | Behavior |
 | :--- | :--- |
@@ -104,7 +103,7 @@ E_{\alpha,\beta}(-X)\approx h\left[
 \right].
 $$
 
-This explains the four arrays in `MLQuad`. The structure contains 127 doubles, or 1,016 bytes with eight-byte doubles. Expensive complex exponentials and powers are paid once during setup. Changing $X$ requires only real additions, multiplications, and divisions.
+This explains the four arrays in `MLQuad`. The structure contains 127 doubles, or 1,016 bytes with eight-byte doubles. Setup computes these coefficients with real logarithms, exponentials, and trigonometric functions: for $w=1+iu$, use $\log|w|=\tfrac12\log(1+u^2)$ and $\arg w=\arctan u$. Neither setup nor evaluation requires complex types or `<complex.h>`. Changing $X$ requires only real additions, multiplications, and divisions.
 
 ![Function values for the tested parameter families](docs/figures/values.png)
 
@@ -116,13 +115,13 @@ For the nine general pairs, the reference is `pymittagleffler 0.2.1` [5] at posi
 
 | $\alpha$ | $\beta$ | Maximum absolute difference | Maximum relative difference |
 | :--- | :--- | ---: | ---: |
-| 0.55 | 0.55 | $1.23\times10^{-15}$ | $1.32\times10^{-11}$ |
-| 0.55 | 1.00 | $4.38\times10^{-14}$ | $4.38\times10^{-14}$ |
+| 0.55 | 0.55 | $1.23\times10^{-15}$ | $1.29\times10^{-11}$ |
+| 0.55 | 1.00 | $4.39\times10^{-14}$ | $4.39\times10^{-14}$ |
 | 0.55 | 1.55 | $1.86\times10^{-12}$ | $1.65\times10^{-12}$ |
-| 0.75 | 0.75 | $5.00\times10^{-15}$ | $2.05\times10^{-11}$ |
+| 0.75 | 0.75 | $5.22\times10^{-15}$ | $1.73\times10^{-11}$ |
 | 0.75 | 1.00 | $4.38\times10^{-14}$ | $4.38\times10^{-14}$ |
 | 0.75 | 1.75 | $5.81\times10^{-12}$ | $5.34\times10^{-12}$ |
-| 0.95 | 0.95 | $2.95\times10^{-14}$ | $7.14\times10^{-11}$ |
+| 0.95 | 0.95 | $2.96\times10^{-14}$ | $6.48\times10^{-11}$ |
 | 0.95 | 1.00 | $4.39\times10^{-14}$ | $4.39\times10^{-14}$ |
 | 0.95 | 1.95 | $1.69\times10^{-11}$ | $1.65\times10^{-11}$ |
 
@@ -132,27 +131,31 @@ Table entries are rounded upward. These are sampled differences from a numerical
 
 Additional checks use $E_{1/2,1}(-X)=\operatorname{erfcx}(X)$ [4], evaluated with SciPy: the maximum sampled absolute difference is $4.66\times10^{-14}$. The two $\alpha=1$ shortcuts are checked against their elementary formulas evaluated with 80-digit Python `Decimal` arithmetic and rounded to double precision. These checks, together with the nine general pairs, cover 3,624 values.
 
+The [expanded correctness check](tests/correctness.cpp) brings the total to **72,762 values**. It adds $\alpha=0.05,0.10,\ldots,0.95$ and $\alpha\in\{0.001,0.01,0.99,0.999\}$, with $\beta\in\{\alpha,1,\alpha+1\}$, at zero and 1,001 positive points in $[10^{-12},10^6]$. The maximum absolute difference from the independent references is $2.16\times10^{-11}$; the maximum relative difference is $3.86\times10^{-7}$, occurring at large $X$ where the function is very small. Across all samples, the largest absolute change from the original complex setup at commit `a17defe` is $7.78\times10^{-16}$. Zero, negative inputs, NaN, and infinities also pass the behavior checks above.
+
 There is no runtime error estimator or automatic refinement. Validate new parameter ranges and required tolerances before relying on them. Acceptance of a finite `X` does not imply uniform accuracy over the full floating-point range; the squared denominator can overflow for extremely large inputs.
 
 ## Throughput
 
-Benchmarked on an Intel Xeon Gold 6134 with GCC 11.4.0 and `-std=gnu++20 -O3 -march=native`, without `-ffast-math`. One process is pinned to a single logical CPU. Five runs are summarized by their median; the figure shows their minimum and maximum as whiskers.
+Benchmarked on an Intel Xeon Gold 6134 with GCC 11.4.0 and `-std=gnu++20 -O3 -march=native`, without `-ffast-math`. One process is pinned to logical CPU 0. Five runs of the current real-arithmetic implementation are summarized by their median; the figure shows their minimum and maximum as whiskers.
 
 Each run cycles through 4,096 logarithmically spaced inputs in $[10^{-6},100]$ for at least 0.25 seconds per pair. Initialization and one warm-up batch are outside the timer. Timing uses `CLOCK_MONOTONIC_RAW`. Input loads, loop overhead, checksum accumulation, and one clock check per batch are included. Printing is outside the timed interval.
 
 | Evaluation path | Median throughput | Median time per evaluation |
 | :--- | ---: | ---: |
-| Nine general quadrature cases | 25.89 to 26.01 million/s | 38.44 to 38.62 ns |
-| $(\alpha,\beta)=(1,1)$, `exp` | 67.51 million/s | 14.81 ns |
-| $(\alpha,\beta)=(1,2)$, `expm1` | 39.71 million/s | 25.19 ns |
+| Nine general quadrature cases | 33.13 to 34.10 million/s | 29.32 to 30.19 ns |
+| $(\alpha,\beta)=(1,1)$, `exp` | 141.02 million/s | 7.09 ns |
+| $(\alpha,\beta)=(1,2)$, `expm1` | 71.64 million/s | 13.96 ns |
 
 ![Measured evaluation throughput](docs/figures/throughput.png)
 
 These measurements cover repeated evaluation with a reused `MLQuad`, excluding setup. Throughput depends on hardware, compiler, CPU load, and clock frequency. The printed checksum keeps the accumulated results observable to the compiler; it is not an accuracy test.
 
+The [initialization benchmark](tests/initialization.cpp) measures 65,536 initializations per general parameter pair after 512 warm-up calls, subtracting the cost of the same loop with initialization removed. Across the nine pairs, median setup costs range from **2.28 to 2.40 microseconds**. In five alternating runs against the original complex setup at commit `a17defe`, the median of the nine pair medians falls from 5.119 to 2.326 microseconds: **2.20 times faster initialization**. General evaluation changes from 29.537 to 29.845 ns by the same aggregation, about 1% slower, with overlapping five-run timing ranges for every pair.
+
 ## Build and reproduce
 
-The current benchmark targets Linux x86-64 and uses GNU C++ extensions, including C complex arithmetic. Build and run from the repository root:
+The current benchmark targets Linux x86-64 and uses GNU C++ extensions. Build and run from the repository root:
 
 ```bash
 ./build.sh
@@ -172,11 +175,19 @@ bash docs/measure.sh > "$ML_RESULTS/measurements.txt"
 Regenerate the figures with `uv`:
 
 ```bash
-uv run docs/figures.py "$ML_RESULTS/measurements.txt" \
+uv run --python 3.12 docs/figures.py "$ML_RESULTS/measurements.txt" \
     --figures docs/figures --data "$ML_RESULTS"
 ```
 
 The script pins its Python dependencies, checks the sample and repetition counts, writes the reference comparisons and summary to the selected data directory, and creates the four README figures. The evaluator itself requires no Python dependencies.
+
+To reproduce the expanded correctness sweep and the initialization comparison against the frozen original implementation:
+
+```bash
+bash tests/compare.sh all
+```
+
+This uses `uv` with Python 3.12 for independent references and writes raw samples, five timing runs per implementation, disassembly, and a summary to the Git-ignored `results/real-arithmetic/` directory. `ML_CPU` selects the benchmark CPU, defaulting to 0.
 
 ## License
 

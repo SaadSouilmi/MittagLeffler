@@ -18,7 +18,6 @@ typedef int64_t I64;
 
 typedef float  F32;
 typedef double F64;
-typedef double _Complex complex64;
 
 
 #define Min(a, b) (((a) < (b)) ? (a) : (b))
